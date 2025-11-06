@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -25,26 +26,35 @@ func main() {
 	}
 }
 
+type Metadata struct {
+	Type    string `json:"type"`
+	Version string `json:"version"`
+	Ticket  string `json:"ticket,omitempty"`
+}
+
+func handleHandshake(reader *bufio.Reader) (*Metadata, error) {
+
+	var metadata Metadata
+	decoder := json.NewDecoder(reader)
+	err := decoder.Decode(&metadata)
+	if err != nil {
+		return &metadata, err
+	}
+	return &metadata, nil
+}
+
 func handleConnection(c net.Conn) {
 	defer c.Close()
 	buffer := bufio.NewReader(c)
 
 	fmt.Println("Connection received from ", c.RemoteAddr())
-
-	msg, err := buffer.ReadString('\n')
+	metadata, err := handleHandshake(buffer)
 	if err != nil {
-		fmt.Println("Connection closed or err", err)
+		fmt.Println("Invalid Handshake")
 		return
 	}
 
-	if msg != "HELLO\n" {
-		fmt.Println("Invaild Handshake from", c.RemoteAddr(), "msg :", msg)
-		c.Write([]byte("INVALID HANDSHAKE\n"))
-		return
-	}
-
-	c.Write([]byte("WELCOME\n"))
-	fmt.Println("Handshake successful with", c.RemoteAddr())
+	fmt.Println("Handshake received. Ticket:", metadata.Ticket)
 
 	for {
 		msg, err := buffer.ReadString('\n')
