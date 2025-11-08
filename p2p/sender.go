@@ -8,7 +8,7 @@ import (
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
 )
 
-func performHandshake(c net.Conn, ticket string) error {
+func ServerHandshake(c net.Conn, ticket string) error {
 
 	var payload handshake.RequestPayload
 
