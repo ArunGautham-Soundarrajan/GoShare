@@ -14,7 +14,7 @@ import (
 // The current limit is set to 10 MB.
 const MaxFrameSize = 10 * 1024 * 1024
 
-func readFrame(r io.Reader, v interface{}) error {
+func ReadFrame(r io.Reader, v interface{}) error {
 	lenBuf := make([]byte, 4)
 	// Read the 4-byte length prefix
 	if _, err := io.ReadFull(r, lenBuf); err != nil {
@@ -40,7 +40,7 @@ func readFrame(r io.Reader, v interface{}) error {
 
 // verifyClient checks if the clientTicket matches the expectedServerTicket.
 // Returns an error if the tickets do not match, or nil if they do.
-func verifyClient(expectedServerTicket string, clientTicket string) error {
+func VerifyClient(expectedServerTicket string, clientTicket string) error {
 	if clientTicket != expectedServerTicket {
 		return fmt.Errorf("client ticket validation failed: ticket mismatch")
 	}
@@ -48,7 +48,7 @@ func verifyClient(expectedServerTicket string, clientTicket string) error {
 	return nil
 }
 
-func writeFrame(w io.Writer, data []byte) error {
+func WriteFrame(w io.Writer, data []byte) error {
 
 	// calculate the length of the payload
 	length := uint32(len(data))
