@@ -40,7 +40,7 @@ func ReadFrame(r io.Reader, v interface{}) error {
 
 // verifyClient checks if the clientTicket matches the expectedServerTicket.
 // Returns an error if the tickets do not match, or nil if they do.
-func VerifyClient(expectedServerTicket string, clientTicket string) error {
+func VerifyTicket(expectedServerTicket string, clientTicket string) error {
 	if clientTicket != expectedServerTicket {
 		return fmt.Errorf("client ticket validation failed: ticket mismatch")
 	}

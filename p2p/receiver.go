@@ -27,7 +27,7 @@ func ClientHandshake(c net.Conn, ticket string) error {
 		return fmt.Errorf("failed to read handshake response: %w", err)
 	}
 
-	if resp.Status != "Success" {
+	if resp.Status != "success" {
 		return fmt.Errorf("server rejected handshake")
 	}
 

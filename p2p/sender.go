@@ -17,10 +17,13 @@ func ServerHandshake(c net.Conn, ticket string) error {
 		return fmt.Errorf("failed to read receiver ticket frame: %w", err)
 	}
 
-	err = handshake.VerifyClient(ticket, payload.Ticket)
+	err = handshake.VerifyTicket(ticket, payload.Ticket)
 	if err != nil {
 		failureJSON, _ := json.Marshal(handshake.Response{Status: "failure"})
-		handshake.WriteFrame(c, failureJSON)
+		if err := handshake.WriteFrame(c, failureJSON); err != nil {
+			c.Close()
+			return fmt.Errorf("failed to send response: %w", err)
+		}
 		c.Close()
 		return fmt.Errorf("receiver ticket verification failed: %w", err)
 	}
