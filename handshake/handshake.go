@@ -47,3 +47,32 @@ func verifyClient(expectedServerTicket string, clientTicket string) error {
 	// Return nil for success
 	return nil
 }
+
+func writeFrame(w io.Writer, data []byte) error {
+
+	// calculate the length of the payload
+	length := uint32(len(data))
+
+	// return error if the length of the payload exceeds Max framesize
+	if length > MaxFrameSize {
+		return fmt.Errorf("response data size %d exceeds max limit %d", length, MaxFrameSize)
+	}
+
+	// Encode the lenght of the payload to 4-byte length prefix
+	lenBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(lenBuf, length)
+
+	// Write the length prefix
+	_, err := w.Write(lenBuf)
+	if err != nil {
+		return fmt.Errorf("failed to write frame length ", err)
+	}
+
+	// Write the payload data
+	_, err = w.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write frame payload ", err)
+	}
+
+	return nil
+}
