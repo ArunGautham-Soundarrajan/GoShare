@@ -65,13 +65,13 @@ func writeFrame(w io.Writer, data []byte) error {
 	// Write the length prefix
 	_, err := w.Write(lenBuf)
 	if err != nil {
-		return fmt.Errorf("failed to write frame length ", err)
+		return fmt.Errorf("failed to write frame length %w", err)
 	}
 
 	// Write the payload data
 	_, err = w.Write(data)
 	if err != nil {
-		return fmt.Errorf("failed to write frame payload ", err)
+		return fmt.Errorf("failed to write frame payload %w", err)
 	}
 
 	return nil
