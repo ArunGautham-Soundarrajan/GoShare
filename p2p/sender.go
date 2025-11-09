@@ -1,9 +1,12 @@
 package p2p
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"os"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
 )
@@ -33,6 +36,12 @@ func ServerHandshake(c net.Conn, ticket string) error {
 		c.Close()
 		return fmt.Errorf("failed to send success response: %w", err)
 	}
+
+	err = StreamFile(c, "/Users/arun_s/Workspace/go_projects/GoShare/README.md")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -52,4 +61,45 @@ func StartSever() error {
 		}
 		go ServerHandshake(conn, "test")
 	}
+}
+
+func StreamFile(c net.Conn, filePath string) error {
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("error opening the file %w", err)
+	}
+	defer file.Close()
+
+	fileBuffer := make([]byte, 1024*1024) //1MB chunks
+
+	for {
+		n, readErr := file.Read(fileBuffer)
+		if readErr == io.EOF {
+			break // File finished
+		}
+		if readErr != nil {
+			return fmt.Errorf("error reading file: %w", readErr)
+		}
+		if n > 0 {
+			chunk := fileBuffer[:n]
+
+			encodedChunk := base64.StdEncoding.EncodeToString(chunk)
+
+			dataFrame := handshake.FileData{
+				Type: "CHUNK",
+				Data: encodedChunk,
+			}
+
+			data, _ := json.Marshal(dataFrame)
+			err = handshake.WriteFrame(c, data)
+			if err != nil {
+				return fmt.Errorf("failed to stream chunk: %w", err)
+			}
+		}
+
+	}
+
+	eofFrame, _ := json.Marshal(struct{ Type string }{"EOF"})
+	return handshake.WriteFrame(c, eofFrame)
 }
