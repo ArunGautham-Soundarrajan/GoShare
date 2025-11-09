@@ -33,3 +33,14 @@ func ClientHandshake(c net.Conn, ticket string) error {
 
 	return nil
 }
+
+func StartClient() error {
+	conn, err := net.Dial("tcp", ":8080")
+	if err != nil {
+		return fmt.Errorf("error Dialing to the server %w", err)
+	}
+
+	ClientHandshake(conn, "test")
+
+	return nil
+}

@@ -35,3 +35,21 @@ func ServerHandshake(c net.Conn, ticket string) error {
 	}
 	return nil
 }
+
+func StartSever() error {
+	listener, err := net.Listen("tcp", ":8080")
+	fmt.Println("Lisenting on localhost:8080")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	defer listener.Close()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			fmt.Println(err)
+		}
+		go ServerHandshake(conn, "test")
+	}
+}
