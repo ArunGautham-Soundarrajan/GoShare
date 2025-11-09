@@ -9,3 +9,8 @@ type RequestPayload struct {
 type Response struct {
 	Status string `json:"status"`
 }
+
+type FileData struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
