@@ -11,7 +11,8 @@ import (
 func main() {
 	switch os.Args[1] {
 	case "send":
-		log.Fatal(p2p.StartSever())
+		tcpHost := p2p.NewHost(":8080", "./README.md")
+		log.Fatal(tcpHost.StartSever())
 	case "receive":
 		log.Fatal(p2p.StartClient())
 	default:
