@@ -14,3 +14,9 @@ type FileData struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
 }
+
+type FileInfoPayload struct {
+	Type     string `json:"type"`
+	FileName string `json:"filename"`
+	Size     int64  `json:"size"`
+}
