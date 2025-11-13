@@ -20,18 +20,26 @@ type Peer struct {
 type TCPHost struct {
 	ListenAddr string
 	ticket     string
-	filepath   string
+	file       os.FileInfo
 	peers      map[string]*Peer // clientaddr : net.conn
 	mu         sync.RWMutex
 }
 
 // Constructor for new TCP host
-func NewHost(listenAddr string, filepath string) *TCPHost {
+func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
+
+	info, err := os.Stat(filepath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file Doesn't exist at the location", err)
+		}
+		return nil, err
+	}
 	return &TCPHost{
 		ListenAddr: listenAddr,
-		filepath:   filepath,
+		file:       info,
 		peers:      make(map[string]*Peer),
-	}
+	}, nil
 }
 
 // Get the file name, and generte a ticket which would let the client
@@ -90,8 +98,14 @@ func (t *TCPHost) handleConnection(c net.Conn) error {
 	}
 	t.mu.Unlock()
 
+	// Send the file info
+	err = t.SendFileInfo(c)
+	if err != nil {
+		return err
+	}
+
 	// Stream the file
-	err = StreamFile(c, t.filepath)
+	err = StreamFile(c, t.file.Name())
 	if err != nil {
 		return err
 	}
@@ -123,6 +137,26 @@ func (t *TCPHost) SeverHandshake(c net.Conn) error {
 	if err := handshake.WriteFrame(c, successJSON); err != nil {
 		return fmt.Errorf("failed to send success response: %w", err)
 	}
+	return nil
+}
+
+// Send the fileinfo to the client
+func (t *TCPHost) SendFileInfo(c net.Conn) error {
+
+	payload := handshake.FileInfoPayload{
+		Type:     "FILE_INFO",
+		FileName: t.file.Name(),
+		Size:     t.file.Size(),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal file info payload: %w", err)
+	}
+
+	if err := handshake.WriteFrame(c, data); err != nil {
+		return fmt.Errorf("failed to send file info: %w", err)
+	}
+
 	return nil
 }
 
