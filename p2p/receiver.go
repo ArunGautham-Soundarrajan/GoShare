@@ -15,7 +15,8 @@ type TCPClient struct {
 	ticket string
 
 	// Extract and store these once the conn is established
-	filepath string
+	fileName string
+	fileSize int64
 	address  string
 }
 
@@ -34,22 +35,32 @@ func NewTCPClient(ticket string) *TCPClient {
 func (t *TCPClient) DialAndConnect() error {
 
 	// determine the address
+	// TODO: Once ticketing system is ready, derive address from that
+	t.address = ":8080"
 
 	conn, err := net.Dial("tcp", t.address)
 	if err != nil {
 		return fmt.Errorf("error Dialing to the server %w", err)
 	}
 
+	defer conn.Close()
+
 	err = t.ClientHandshake(conn)
 	if err != nil {
 		return err
 	}
 
-	err = ReceiveFile(conn, t.filepath)
-	if err != nil {
+	// receive the file info
+	if err = t.ReceiveFileInfo(conn); err != nil {
 		return err
 	}
 
+	if t.fileName != "" {
+		err = ReceiveFile(conn, t.fileName)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 
 }
@@ -78,6 +89,25 @@ func (t *TCPClient) ClientHandshake(c net.Conn) error {
 
 	if resp.Status != "success" {
 		return fmt.Errorf("server rejected handshake")
+	}
+
+	return nil
+}
+
+// function to receive the file info from the server
+func (t *TCPClient) ReceiveFileInfo(c net.Conn) error {
+
+	var fileInfo handshake.FileInfoPayload
+
+	if err := handshake.ReadFrame(c, &fileInfo); err != nil {
+		return fmt.Errorf("error while reading file info %w", err)
+	}
+
+	if fileInfo.Type == "FILE_INFO" {
+		t.fileName = fileInfo.FileName
+		t.fileSize = fileInfo.Size
+
+		fmt.Println(fileInfo)
 	}
 
 	return nil
