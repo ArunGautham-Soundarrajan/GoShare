@@ -13,3 +13,5 @@ GoShare is a planned peer-to-peer (P2P) file sharing system written in Go. The g
 - [ ] Refactor Streamfile function
 - [ ] Refactor ReceiveFile function
 - [ ] Make the protocal flexible, currently very rigid
+
+- [ ] Implement better p2p system with STUN, Hole punching to stream file
