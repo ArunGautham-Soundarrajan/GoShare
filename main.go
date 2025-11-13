@@ -14,7 +14,8 @@ func main() {
 		tcpHost := p2p.NewHost(":8080", "./README.md")
 		log.Fatal(tcpHost.StartSever())
 	case "receive":
-		log.Fatal(p2p.StartClient())
+		tcpClient := p2p.NewTCPClient("test")
+		log.Fatal(tcpClient.DialAndConnect())
 	default:
 		fmt.Println("expected either 'send' or 'receive'")
 		os.Exit(1)

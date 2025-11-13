@@ -11,12 +11,57 @@ import (
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
 )
 
-func ClientHandshake(c net.Conn, ticket string) error {
+type TCPClient struct {
+	ticket string
 
+	// Extract and store these once the conn is established
+	filepath string
+	address  string
+}
+
+// Constructor functions to create a new TCP Client
+// Takes in a ticket which is required to receive the file
+func NewTCPClient(ticket string) *TCPClient {
+	return &TCPClient{
+		ticket: ticket,
+	}
+}
+
+// Starting point for the TCP Client,
+// Identifies the address to connect using the ticket
+// Performs handshake, gets the file details
+// Finally stores the file
+func (t *TCPClient) DialAndConnect() error {
+
+	// determine the address
+
+	conn, err := net.Dial("tcp", t.address)
+	if err != nil {
+		return fmt.Errorf("error Dialing to the server %w", err)
+	}
+
+	err = t.ClientHandshake(conn)
+	if err != nil {
+		return err
+	}
+
+	err = ReceiveFile(conn, t.filepath)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// Function to perform the handshake with the server
+func (t *TCPClient) ClientHandshake(c net.Conn) error {
+
+	// Payload containing the ticket
 	payload := handshake.RequestPayload{
 		Type:    "Handshake",
 		Version: "1.0",
-		Ticket:  ticket,
+		Ticket:  t.ticket,
 	}
 	data, _ := json.Marshal(payload)
 	err := handshake.WriteFrame(c, data)
@@ -24,6 +69,7 @@ func ClientHandshake(c net.Conn, ticket string) error {
 		return fmt.Errorf("failed to send handshake request: %w", err)
 	}
 
+	// Response from the server (ACK)
 	var resp handshake.Response
 	err = handshake.ReadFrame(c, &resp)
 	if err != nil {
@@ -32,25 +78,6 @@ func ClientHandshake(c net.Conn, ticket string) error {
 
 	if resp.Status != "success" {
 		return fmt.Errorf("server rejected handshake")
-	}
-
-	return nil
-}
-
-func StartClient() error {
-	conn, err := net.Dial("tcp", ":8080")
-	if err != nil {
-		return fmt.Errorf("error Dialing to the server %w", err)
-	}
-
-	err = ClientHandshake(conn, "test")
-	if err != nil {
-		return err
-	}
-
-	err = ReceiveFile(conn, "READMEEEE.md")
-	if err != nil {
-		return err
 	}
 
 	return nil
