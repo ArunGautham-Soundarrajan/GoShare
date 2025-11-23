@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +26,6 @@ type TCPHost struct {
 
 // Constructor for new TCP host
 func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
-
 	info, err := os.Stat(filepath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -45,7 +43,6 @@ func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
 // Get the file name, and generte a ticket which would let the client
 // Identify the server and dial to it to request files
 func (t *TCPHost) GenerateTicket() error {
-
 	// Placeholder while we implement Ticket logic
 	t.ticket = "test"
 	return nil
@@ -54,7 +51,6 @@ func (t *TCPHost) GenerateTicket() error {
 // Start the Server and listen for incoming connections
 // Upon receiving connections, handle the connections concurrently
 func (t *TCPHost) StartSever() error {
-
 	// Generate the ticket
 	t.GenerateTicket()
 
@@ -81,7 +77,6 @@ func (t *TCPHost) StartSever() error {
 // Append to the list of peers
 // Transfer the file
 func (t *TCPHost) handleConnection(c net.Conn) error {
-
 	defer c.Close()
 
 	// Perform the handshake with the client
@@ -116,7 +111,6 @@ func (t *TCPHost) handleConnection(c net.Conn) error {
 // Perform handshake with the client
 // This involves, verifying if the ticket is valid and acknowleding it
 func (t *TCPHost) SeverHandshake(c net.Conn) error {
-
 	var payload handshake.RequestPayload
 
 	err := handshake.ReadFrame(c, &payload)
@@ -142,7 +136,6 @@ func (t *TCPHost) SeverHandshake(c net.Conn) error {
 
 // Send the fileinfo to the client
 func (t *TCPHost) SendFileInfo(c net.Conn) error {
-
 	payload := handshake.FileInfoPayload{
 		Type:     "FILE_INFO",
 		FileName: t.file.Name(),
@@ -163,14 +156,13 @@ func (t *TCPHost) SendFileInfo(c net.Conn) error {
 // This functions streams the file to the client
 // TODO: Refactor and make it concurrent
 func StreamFile(c net.Conn, filePath string) error {
-
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("error opening the file %w", err)
 	}
 	defer file.Close()
 
-	fileBuffer := make([]byte, 1024*1024) //1MB chunks
+	fileBuffer := make([]byte, 1024*1024) // 1MB chunks
 
 	for {
 		n, readErr := file.Read(fileBuffer)
@@ -183,21 +175,20 @@ func StreamFile(c net.Conn, filePath string) error {
 		if n > 0 {
 			chunk := fileBuffer[:n]
 
-			encodedChunk := base64.StdEncoding.EncodeToString(chunk)
+			// encodedChunk := base64.StdEncoding.EncodeToString(chunk)
 
-			dataFrame := handshake.FileData{
-				Type: "CHUNK",
-				Data: encodedChunk,
-			}
+			// dataFrame := handshake.FileData{
+			//	Type: "CHUNK",
+			//	Data: encodedChunk,
+			// }
 
-			data, _ := json.Marshal(dataFrame)
-			err = handshake.WriteFrame(c, data)
+			// data, _ := json.Marshal(dataFrame)
+			err = handshake.WriteFrame(c, chunk)
 			if err != nil {
 				return fmt.Errorf("failed to stream chunk: %w", err)
 			}
 		}
 	}
 
-	eofFrame, _ := json.Marshal(struct{ Type string }{"EOF"})
-	return handshake.WriteFrame(c, eofFrame)
+	return handshake.WriteFrame(c, nil)
 }
