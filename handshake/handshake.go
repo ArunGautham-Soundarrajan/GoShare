@@ -27,7 +27,10 @@ func ReadFrame(r io.Reader, v interface{}) error {
 	if length > MaxFrameSize {
 		return fmt.Errorf("frame size %d exceeds max limit %d", length, MaxFrameSize)
 	}
-
+  
+	if length == 0 {
+		return io.EOF
+	}
 	// Read the payload
 	payload := make([]byte, length)
 	if _, err := io.ReadFull(r, payload); err != nil {
@@ -37,6 +40,35 @@ func ReadFrame(r io.Reader, v interface{}) error {
 	//Unmarshal the JSON
 	return json.Unmarshal(payload, v)
 }
+
+func ReadRawFrame(r io.Reader) ([]byte, error) {
+
+	lenBuf := make([]byte, 4)
+	// Read the 4-byte length prefix
+	if _, err := io.ReadFull(r, lenBuf); err != nil {
+		return nil, fmt.Errorf("failed to read frame length: %w", err)
+	}
+
+	length := binary.BigEndian.Uint32(lenBuf)
+
+	// Check for maximum size limit (Security/Stability)
+	if length > MaxFrameSize {
+		return nil, fmt.Errorf("frame size %d exceeds max limit %d", length, MaxFrameSize)
+	}
+  
+	if length == 0 {
+		return nil, io.EOF
+	}
+	// Read the payload
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return nil, fmt.Errorf("failed to read payload of length %d: %w", length, err)
+	}
+
+	// Send the raw bites directly 
+	return payload, nil
+}
+
 
 // verifyClient checks if the clientTicket matches the expectedServerTicket.
 // Returns an error if the tickets do not match, or nil if they do.
