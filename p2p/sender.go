@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 type Peer struct {
@@ -17,11 +19,11 @@ type Peer struct {
 }
 
 type TCPHost struct {
-	ListenAddr string
-	ticket     string
-	file       os.FileInfo
-	peers      map[string]*Peer // clientaddr : net.conn
-	mu         sync.RWMutex
+	ticket string
+	Host   host.Host
+	file   os.FileInfo
+	peers  map[string]*Peer // clientaddr : net.conn
+	mu     sync.RWMutex
 }
 
 // Constructor for new TCP host
@@ -29,14 +31,24 @@ func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
 	info, err := os.Stat(filepath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("file Doesn't exist at the location", err)
+			return nil, fmt.Errorf("file Doesn't exist at the location %w", err)
 		}
 		return nil, err
 	}
+
+	host, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), // Listen on random port
+		libp2p.NATPortMap(),                            // Try UPnP/PMP
+		libp2p.EnableHolePunching(),                    // Crucial for NAT traversal
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creating a host %w", err)
+	}
+
 	return &TCPHost{
-		ListenAddr: listenAddr,
-		file:       info,
-		peers:      make(map[string]*Peer),
+		Host:  host,
+		file:  info,
+		peers: make(map[string]*Peer),
 	}, nil
 }
 
@@ -53,23 +65,9 @@ func (t *TCPHost) GenerateTicket() error {
 func (t *TCPHost) StartSever() error {
 	// Generate the ticket
 	t.GenerateTicket()
-
 	// Start listening for peers
-	listener, err := net.Listen("tcp", t.ListenAddr)
-	fmt.Println("Lisenting on localhost:8080")
-	if err != nil {
-		fmt.Println(err)
-	}
 
-	defer listener.Close()
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println(err)
-		}
-		go t.handleConnection(conn)
-	}
+	return nil
 }
 
 // Core logic to handle incoming connections
