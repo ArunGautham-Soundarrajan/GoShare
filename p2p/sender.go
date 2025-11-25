@@ -6,11 +6,11 @@ import (
 	"io"
 	"net"
 	"os"
-	"sync"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Peer struct {
@@ -22,8 +22,6 @@ type TCPHost struct {
 	ticket string
 	Host   host.Host
 	file   os.FileInfo
-	peers  map[string]*Peer // clientaddr : net.conn
-	mu     sync.RWMutex
 }
 
 // Constructor for new TCP host
@@ -46,17 +44,25 @@ func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
 	}
 
 	return &TCPHost{
-		Host:  host,
-		file:  info,
-		peers: make(map[string]*Peer),
+		Host: host,
+		file: info,
 	}, nil
 }
 
 // Get the file name, and generte a ticket which would let the client
 // Identify the server and dial to it to request files
 func (t *TCPHost) GenerateTicket() error {
+	peerInfo := peer.AddrInfo{
+		ID:    t.Host.ID(),
+		Addrs: t.Host.Addrs(),
+	}
+
+	addrs, err := peer.AddrInfoToP2pAddrs(&peerInfo)
+	if err != nil {
+		return err
+	}
 	// Placeholder while we implement Ticket logic
-	t.ticket = "test"
+	t.ticket = addrs[0].String()
 	return nil
 }
 
@@ -64,7 +70,12 @@ func (t *TCPHost) GenerateTicket() error {
 // Upon receiving connections, handle the connections concurrently
 func (t *TCPHost) StartSever() error {
 	// Generate the ticket
-	t.GenerateTicket()
+	err := t.GenerateTicket()
+	if err != nil {
+		return nil
+	}
+
+	fmt.Println("Server is ready. Share the ticket:", t.ticket)
 	// Start listening for peers
 
 	return nil
@@ -82,14 +93,6 @@ func (t *TCPHost) handleConnection(c net.Conn) error {
 	if err != nil {
 		return err
 	}
-
-	// Add the peer to the list of peers
-	t.mu.Lock()
-	t.peers[c.RemoteAddr().String()] = &Peer{
-		Conn: c,
-		Addr: c.RemoteAddr().String(),
-	}
-	t.mu.Unlock()
 
 	// Send the file info
 	err = t.SendFileInfo(c)
