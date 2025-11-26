@@ -115,10 +115,10 @@ func (t *TCPHost) handleConnection(s network.Stream) {
 
 // Perform handshake with the client
 // This involves, verifying if the ticket is valid and acknowleding it
-func (t *TCPHost) SeverHandshake(s network.Stream) error {
+func (t *TCPHost) SeverHandshake(rw io.ReadWriteCloser) error {
 	var payload handshake.RequestPayload
 
-	err := handshake.ReadFrame(s, &payload)
+	err := handshake.ReadFrame(rw, &payload)
 	if err != nil {
 		return fmt.Errorf("failed to read receiver ticket frame: %w", err)
 	}
@@ -126,21 +126,21 @@ func (t *TCPHost) SeverHandshake(s network.Stream) error {
 	err = handshake.VerifyTicket(t.ticket, payload.Ticket)
 	if err != nil {
 		failureJSON, _ := json.Marshal(handshake.Response{Status: "failure"})
-		if err := handshake.WriteFrame(s, failureJSON); err != nil {
+		if err := handshake.WriteFrame(rw, failureJSON); err != nil {
 			return fmt.Errorf("failed to send response: %w", err)
 		}
 		return fmt.Errorf("receiver ticket verification failed: %w", err)
 	}
 
 	successJSON, _ := json.Marshal(handshake.Response{Status: "success"})
-	if err := handshake.WriteFrame(s, successJSON); err != nil {
+	if err := handshake.WriteFrame(rw, successJSON); err != nil {
 		return fmt.Errorf("failed to send success response: %w", err)
 	}
 	return nil
 }
 
 // Send the fileinfo to the client
-func (t *TCPHost) SendFileInfo(s network.Stream) error {
+func (t *TCPHost) SendFileInfo(w io.Writer) error {
 	payload := handshake.FileInfoPayload{
 		Type:     "FILE_INFO",
 		FileName: t.file.Name(),
@@ -151,7 +151,7 @@ func (t *TCPHost) SendFileInfo(s network.Stream) error {
 		return fmt.Errorf("failed to marshal file info payload: %w", err)
 	}
 
-	if err := handshake.WriteFrame(s, data); err != nil {
+	if err := handshake.WriteFrame(w, data); err != nil {
 		return fmt.Errorf("failed to send file info: %w", err)
 	}
 
@@ -160,40 +160,16 @@ func (t *TCPHost) SendFileInfo(s network.Stream) error {
 
 // This functions streams the file to the client
 // TODO: Refactor and make it concurrent
-func StreamFile(s network.Stream, filePath string) error {
+func StreamFile(w io.Writer, filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("error opening the file %w", err)
 	}
 	defer file.Close()
 
-	fileBuffer := make([]byte, 1024*1024) // 1MB chunks
-
-	for {
-		n, readErr := file.Read(fileBuffer)
-		if readErr == io.EOF {
-			break // File finished
-		}
-		if readErr != nil {
-			return fmt.Errorf("error reading file: %w", readErr)
-		}
-		if n > 0 {
-			chunk := fileBuffer[:n]
-
-			// encodedChunk := base64.StdEncoding.EncodeToString(chunk)
-
-			// dataFrame := handshake.FileData{
-			//	Type: "CHUNK",
-			//	Data: encodedChunk,
-			// }
-
-			// data, _ := json.Marshal(dataFrame)
-			err = handshake.WriteFrame(s, chunk)
-			if err != nil {
-				return fmt.Errorf("failed to stream chunk: %w", err)
-			}
-		}
+	_, err = io.Copy(w, file)
+	if err != nil {
+		return fmt.Errorf("error streaming the file %w", err)
 	}
-
-	return handshake.WriteFrame(s, nil)
+	return nil
 }
