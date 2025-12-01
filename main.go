@@ -17,7 +17,7 @@ func main() {
 		}
 		log.Fatal(tcpHost.StartSever())
 	case "receive":
-		tcpClient := p2p.NewTCPClient("test")
+		tcpClient := p2p.NewTCPClient(os.Args[2])
 		log.Fatal(tcpClient.DialAndConnect())
 	default:
 		fmt.Println("expected either 'send' or 'receive'")
