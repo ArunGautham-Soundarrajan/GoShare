@@ -4,47 +4,62 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
-	"sync"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
-type Peer struct {
-	Conn net.Conn
-	Addr string
-}
-
 type TCPHost struct {
-	ListenAddr string
-	ticket     string
-	file       os.FileInfo
-	peers      map[string]*Peer // clientaddr : net.conn
-	mu         sync.RWMutex
+	ticket string
+	Host   host.Host
+	file   os.FileInfo
 }
 
 // Constructor for new TCP host
-func NewHost(listenAddr string, filepath string) (*TCPHost, error) {
+func NewHost(filepath string) (*TCPHost, error) {
 	info, err := os.Stat(filepath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("file Doesn't exist at the location", err)
+			return nil, fmt.Errorf("file Doesn't exist at the location %w", err)
 		}
 		return nil, err
 	}
+
+	host, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), // Listen on random port
+		libp2p.NATPortMap(),                            // Try UPnP/PMP
+		libp2p.EnableHolePunching(),                    // Crucial for NAT traversal
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creating a host %w", err)
+	}
+
 	return &TCPHost{
-		ListenAddr: listenAddr,
-		file:       info,
-		peers:      make(map[string]*Peer),
+		Host: host,
+		file: info,
 	}, nil
 }
 
 // Get the file name, and generte a ticket which would let the client
 // Identify the server and dial to it to request files
 func (t *TCPHost) GenerateTicket() error {
+	peerInfo := peer.AddrInfo{
+		ID:    t.Host.ID(),
+		Addrs: t.Host.Addrs(),
+	}
+
+	addrs, err := peer.AddrInfoToP2pAddrs(&peerInfo)
+	if err != nil {
+		return err
+	}
+
 	// Placeholder while we implement Ticket logic
-	t.ticket = "test"
+	t.ticket = addrs[0].String()
 	return nil
 }
 
@@ -52,68 +67,56 @@ func (t *TCPHost) GenerateTicket() error {
 // Upon receiving connections, handle the connections concurrently
 func (t *TCPHost) StartSever() error {
 	// Generate the ticket
-	t.GenerateTicket()
 
-	// Start listening for peers
-	listener, err := net.Listen("tcp", t.ListenAddr)
-	fmt.Println("Lisenting on localhost:8080")
+	protocolID := "/goshare"
+
+	t.Host.SetStreamHandler(protocol.ID(protocolID), t.handleConnection)
+
+	err := t.GenerateTicket()
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
-	defer listener.Close()
+	fmt.Println("Server is ready. Share the ticket:", t.ticket)
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println(err)
-		}
-		go t.handleConnection(conn)
-	}
+	// prevent the app from closing
+	select {}
 }
 
 // Core logic to handle incoming connections
 // Perform a handshake to verify the client
 // Append to the list of peers
 // Transfer the file
-func (t *TCPHost) handleConnection(c net.Conn) error {
-	defer c.Close()
+func (t *TCPHost) handleConnection(s network.Stream) {
+	defer s.Close()
 
 	// Perform the handshake with the client
-	err := t.SeverHandshake(c)
+	err := t.SeverHandshake(s)
 	if err != nil {
-		return err
+		fmt.Printf("Handshake failed: %v\n", err)
+		return
 	}
-
-	// Add the peer to the list of peers
-	t.mu.Lock()
-	t.peers[c.RemoteAddr().String()] = &Peer{
-		Conn: c,
-		Addr: c.RemoteAddr().String(),
-	}
-	t.mu.Unlock()
 
 	// Send the file info
-	err = t.SendFileInfo(c)
+	err = t.SendFileInfo(s)
 	if err != nil {
-		return err
+		fmt.Printf("sending fileinfo failed: %v\n", err)
+		return
 	}
 
 	// Stream the file
-	err = StreamFile(c, t.file.Name())
+	err = StreamFile(s, t.file.Name())
 	if err != nil {
-		return err
+		return
 	}
-
-	return nil
 }
 
 // Perform handshake with the client
 // This involves, verifying if the ticket is valid and acknowleding it
-func (t *TCPHost) SeverHandshake(c net.Conn) error {
+func (t *TCPHost) SeverHandshake(rw io.ReadWriteCloser) error {
 	var payload handshake.RequestPayload
 
-	err := handshake.ReadFrame(c, &payload)
+	err := handshake.ReadFrame(rw, &payload)
 	if err != nil {
 		return fmt.Errorf("failed to read receiver ticket frame: %w", err)
 	}
@@ -121,21 +124,21 @@ func (t *TCPHost) SeverHandshake(c net.Conn) error {
 	err = handshake.VerifyTicket(t.ticket, payload.Ticket)
 	if err != nil {
 		failureJSON, _ := json.Marshal(handshake.Response{Status: "failure"})
-		if err := handshake.WriteFrame(c, failureJSON); err != nil {
+		if err := handshake.WriteFrame(rw, failureJSON); err != nil {
 			return fmt.Errorf("failed to send response: %w", err)
 		}
 		return fmt.Errorf("receiver ticket verification failed: %w", err)
 	}
 
 	successJSON, _ := json.Marshal(handshake.Response{Status: "success"})
-	if err := handshake.WriteFrame(c, successJSON); err != nil {
+	if err := handshake.WriteFrame(rw, successJSON); err != nil {
 		return fmt.Errorf("failed to send success response: %w", err)
 	}
 	return nil
 }
 
 // Send the fileinfo to the client
-func (t *TCPHost) SendFileInfo(c net.Conn) error {
+func (t *TCPHost) SendFileInfo(w io.Writer) error {
 	payload := handshake.FileInfoPayload{
 		Type:     "FILE_INFO",
 		FileName: t.file.Name(),
@@ -146,7 +149,7 @@ func (t *TCPHost) SendFileInfo(c net.Conn) error {
 		return fmt.Errorf("failed to marshal file info payload: %w", err)
 	}
 
-	if err := handshake.WriteFrame(c, data); err != nil {
+	if err := handshake.WriteFrame(w, data); err != nil {
 		return fmt.Errorf("failed to send file info: %w", err)
 	}
 
@@ -155,40 +158,16 @@ func (t *TCPHost) SendFileInfo(c net.Conn) error {
 
 // This functions streams the file to the client
 // TODO: Refactor and make it concurrent
-func StreamFile(c net.Conn, filePath string) error {
+func StreamFile(w io.Writer, filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("error opening the file %w", err)
 	}
 	defer file.Close()
 
-	fileBuffer := make([]byte, 1024*1024) // 1MB chunks
-
-	for {
-		n, readErr := file.Read(fileBuffer)
-		if readErr == io.EOF {
-			break // File finished
-		}
-		if readErr != nil {
-			return fmt.Errorf("error reading file: %w", readErr)
-		}
-		if n > 0 {
-			chunk := fileBuffer[:n]
-
-			// encodedChunk := base64.StdEncoding.EncodeToString(chunk)
-
-			// dataFrame := handshake.FileData{
-			//	Type: "CHUNK",
-			//	Data: encodedChunk,
-			// }
-
-			// data, _ := json.Marshal(dataFrame)
-			err = handshake.WriteFrame(c, chunk)
-			if err != nil {
-				return fmt.Errorf("failed to stream chunk: %w", err)
-			}
-		}
+	_, err = io.Copy(w, file)
+	if err != nil {
+		return fmt.Errorf("error streaming the file %w", err)
 	}
-
-	return handshake.WriteFrame(c, nil)
+	return nil
 }
