@@ -1,29 +1,38 @@
 package p2p
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type TCPClient struct {
-	ticket string
-
-	// Extract and store these once the conn is established
+	ticket   string
+	client   host.Host // Extract and store these once the conn is established
 	fileName string
 	fileSize int64
-	address  string
+	address  *peer.AddrInfo
 }
 
 // Constructor functions to create a new TCP Client
 // Takes in a ticket which is required to receive the file
 func NewTCPClient(ticket string) *TCPClient {
+	host, err := libp2p.New()
+	if err != nil {
+		return nil
+	}
+
 	return &TCPClient{
 		ticket: ticket,
+		client: host,
 	}
 }
 
@@ -33,28 +42,34 @@ func NewTCPClient(ticket string) *TCPClient {
 // Finally stores the file
 func (t *TCPClient) DialAndConnect() error {
 	// determine the address
-	// TODO: Once ticketing system is ready, derive address from that
-	t.address = ":8080"
+	var err error
+	t.address, err = peer.AddrInfoFromString(t.ticket)
+	if err != nil {
+		return fmt.Errorf("failed to parse senders address %w", err)
+	}
 
-	conn, err := net.Dial("tcp", t.address)
+	err = t.client.Connect(context.TODO(), *t.address)
 	if err != nil {
 		return fmt.Errorf("error Dialing to the server %w", err)
 	}
 
-	defer conn.Close()
+	stream, err := t.client.NewStream(context.TODO(), t.address.ID, "/goshare")
+	if err != nil {
+		return fmt.Errorf("failed to create a steam %w", err)
+	}
 
-	err = t.ClientHandshake(conn)
+	err = t.ClientHandshake(stream)
 	if err != nil {
 		return err
 	}
 
 	// receive the file info
-	if err = t.ReceiveFileInfo(conn); err != nil {
+	if err = t.ReceiveFileInfo(stream); err != nil {
 		return err
 	}
 
 	if t.fileName != "" {
-		err = ReceiveFile(conn, t.fileName)
+		err = ReceiveFile(stream, t.fileName)
 		if err != nil {
 			return err
 		}
@@ -63,7 +78,7 @@ func (t *TCPClient) DialAndConnect() error {
 }
 
 // Function to perform the handshake with the server
-func (t *TCPClient) ClientHandshake(c net.Conn) error {
+func (t *TCPClient) ClientHandshake(s network.Stream) error {
 	// Payload containing the ticket
 	payload := handshake.RequestPayload{
 		Type:    "Handshake",
@@ -71,14 +86,14 @@ func (t *TCPClient) ClientHandshake(c net.Conn) error {
 		Ticket:  t.ticket,
 	}
 	data, _ := json.Marshal(payload)
-	err := handshake.WriteFrame(c, data)
+	err := handshake.WriteFrame(s, data)
 	if err != nil {
 		return fmt.Errorf("failed to send handshake request: %w", err)
 	}
 
 	// Response from the server (ACK)
 	var resp handshake.Response
-	err = handshake.ReadFrame(c, &resp)
+	err = handshake.ReadFrame(s, &resp)
 	if err != nil {
 		return fmt.Errorf("failed to read handshake response: %w", err)
 	}
@@ -91,10 +106,10 @@ func (t *TCPClient) ClientHandshake(c net.Conn) error {
 }
 
 // function to receive the file info from the server
-func (t *TCPClient) ReceiveFileInfo(c net.Conn) error {
+func (t *TCPClient) ReceiveFileInfo(s network.Stream) error {
 	var fileInfo handshake.FileInfoPayload
 
-	if err := handshake.ReadFrame(c, &fileInfo); err != nil {
+	if err := handshake.ReadFrame(s, &fileInfo); err != nil {
 		return fmt.Errorf("error while reading file info %w", err)
 	}
 
@@ -108,30 +123,16 @@ func (t *TCPClient) ReceiveFileInfo(c net.Conn) error {
 	return nil
 }
 
-func ReceiveFile(c net.Conn, filePath string) error {
+func ReceiveFile(s network.Stream, filePath string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("error creating the file %w", err)
 	}
 	defer file.Close()
 
-	for {
-
-		chunk, err := handshake.ReadRawFrame(c)
-
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading data frame: %w", err)
-		}
-
-		_, err = file.Write(chunk)
-		if err != nil {
-			return fmt.Errorf("failed to write data to file: %w", err)
-		}
-
+	_, err = io.Copy(file, s)
+	if err != nil {
+		return fmt.Errorf("error downloading the file %w", err)
 	}
-	fmt.Println("Successfully received file")
 	return nil
 }
