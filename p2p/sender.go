@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 
 	"github.com/ArunGautham-Soundarrajan/goshare/handshake"
@@ -14,11 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
-
-type Peer struct {
-	Conn net.Conn
-	Addr string
-}
 
 type TCPHost struct {
 	ticket string
@@ -63,6 +57,7 @@ func (t *TCPHost) GenerateTicket() error {
 	if err != nil {
 		return err
 	}
+
 	// Placeholder while we implement Ticket logic
 	t.ticket = addrs[0].String()
 	return nil
@@ -72,13 +67,16 @@ func (t *TCPHost) GenerateTicket() error {
 // Upon receiving connections, handle the connections concurrently
 func (t *TCPHost) StartSever() error {
 	// Generate the ticket
+
+	protocolID := "/goshare"
+
+	t.Host.SetStreamHandler(protocol.ID(protocolID), t.handleConnection)
+
 	err := t.GenerateTicket()
 	if err != nil {
 		return err
 	}
-	protocolID := "/goshare"
 
-	t.Host.SetStreamHandler(protocol.ID(protocolID), t.handleConnection)
 	fmt.Println("Server is ready. Share the ticket:", t.ticket)
 
 	// prevent the app from closing
