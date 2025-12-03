@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/schollz/progressbar/v3"
 )
 
 type TCPClient struct {
@@ -69,7 +70,7 @@ func (t *TCPClient) DialAndConnect() error {
 	}
 
 	if t.fileName != "" {
-		err = ReceiveFile(stream, t.fileName)
+		err = t.ReceiveFile(stream)
 		if err != nil {
 			return err
 		}
@@ -123,14 +124,16 @@ func (t *TCPClient) ReceiveFileInfo(s network.Stream) error {
 	return nil
 }
 
-func ReceiveFile(s network.Stream, filePath string) error {
-	file, err := os.Create(filePath)
+func (t *TCPClient) ReceiveFile(s network.Stream) error {
+	file, err := os.Create(t.fileName)
 	if err != nil {
 		return fmt.Errorf("error creating the file %w", err)
 	}
 	defer file.Close()
 
-	_, err = io.Copy(file, s)
+	// progressbar
+	bar := progressbar.DefaultBytes(t.fileSize, "Receiving file")
+	_, err = io.Copy(io.MultiWriter(file, bar), s)
 	if err != nil {
 		return fmt.Errorf("error downloading the file %w", err)
 	}
