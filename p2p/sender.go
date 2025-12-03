@@ -12,12 +12,14 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/schollz/progressbar/v3"
 )
 
 type TCPHost struct {
-	ticket string
-	Host   host.Host
-	file   os.FileInfo
+	ticket   string
+	Host     host.Host
+	file     os.FileInfo
+	filepath string
 }
 
 // Constructor for new TCP host
@@ -40,8 +42,9 @@ func NewHost(filepath string) (*TCPHost, error) {
 	}
 
 	return &TCPHost{
-		Host: host,
-		file: info,
+		Host:     host,
+		file:     info,
+		filepath: filepath,
 	}, nil
 }
 
@@ -105,7 +108,7 @@ func (t *TCPHost) handleConnection(s network.Stream) {
 	}
 
 	// Stream the file
-	err = StreamFile(s, t.file.Name())
+	err = t.StreamFile(s)
 	if err != nil {
 		return
 	}
@@ -158,14 +161,17 @@ func (t *TCPHost) SendFileInfo(w io.Writer) error {
 
 // This functions streams the file to the client
 // TODO: Refactor and make it concurrent
-func StreamFile(w io.Writer, filePath string) error {
-	file, err := os.Open(filePath)
+func (t *TCPHost) StreamFile(w io.Writer) error {
+	file, err := os.Open(t.filepath)
 	if err != nil {
 		return fmt.Errorf("error opening the file %w", err)
 	}
 	defer file.Close()
 
-	_, err = io.Copy(w, file)
+	// progressbar
+	bar := progressbar.DefaultBytes(t.file.Size(), "Sending")
+
+	_, err = io.Copy(io.MultiWriter(w, bar), file)
 	if err != nil {
 		return fmt.Errorf("error streaming the file %w", err)
 	}
