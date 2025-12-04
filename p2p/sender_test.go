@@ -196,13 +196,15 @@ func TestStreamFile_Success(t *testing.T) {
 	filePath, _, cleanup := createTestFile(t, expectedContent)
 	defer cleanup()
 
+	fileInfo, _ := os.Stat(filePath)
+	host := &TCPHost{filepath: filePath, file: fileInfo}
 	// Mock the connection output (what the client receives)
 	var outputBuffer bytes.Buffer
 
 	// Call the function under test (streams content from filePath to outputBuffer)
 	// IMPORTANT: We must pass io.Writer as the first argument, as StreamFile is the
 	// destination for the file data.
-	if err := StreamFile(io.Writer(&outputBuffer), filePath); err != nil {
+	if err := host.StreamFile(io.Writer(&outputBuffer)); err != nil {
 		t.Fatalf("StreamFile failed unexpectedly: %v", err)
 	}
 
@@ -217,15 +219,16 @@ func TestStreamFile_Success(t *testing.T) {
 }
 
 func TestStreamFile_FileNotFound(t *testing.T) {
-	// Create a mock net.Conn for the output
-	var outputBuffer bytes.Buffer
-
 	// File path that definitely does not exist
 	nonExistentPath := "/tmp/nonexistent-file-xyz123"
 
-	// Call the function under test
-	err := StreamFile(io.Writer(&outputBuffer), nonExistentPath)
+	_, err := os.Stat(nonExistentPath)
 
+	host := &TCPHost{filepath: nonExistentPath}
+
+	var outputBuffer bytes.Buffer
+
+	err = host.StreamFile(&outputBuffer)
 	// Assert that an error was returned
 	if err == nil {
 		t.Fatalf("StreamFile was expected to fail for non-existent file but succeeded")
