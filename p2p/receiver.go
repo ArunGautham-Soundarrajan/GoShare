@@ -118,7 +118,7 @@ func (t *TCPClient) ReceiveFileInfo(s network.Stream) error {
 		t.fileName = fileInfo.FileName
 		t.fileSize = fileInfo.Size
 
-		fmt.Println(fileInfo)
+		fmt.Println("Receiving ", fileInfo.FileName)
 	}
 
 	return nil

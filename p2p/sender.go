@@ -20,6 +20,7 @@ type TCPHost struct {
 	Host     host.Host
 	file     os.FileInfo
 	filepath string
+	done     chan struct{}
 }
 
 // Constructor for new TCP host
@@ -31,11 +32,12 @@ func NewHost(filepath string) (*TCPHost, error) {
 		}
 		return nil, err
 	}
-
 	host, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), // Listen on random port
-		libp2p.NATPortMap(),                            // Try UPnP/PMP
-		libp2p.EnableHolePunching(),                    // Crucial for NAT traversal
+		libp2p.EnableNATService(),
+		libp2p.NATPortMap(),         // Try UPnP/PMP
+		libp2p.EnableHolePunching(), // Crucial for NAT traversal
+		libp2p.EnableRelay(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error creating a host %w", err)
@@ -45,6 +47,7 @@ func NewHost(filepath string) (*TCPHost, error) {
 		Host:     host,
 		file:     info,
 		filepath: filepath,
+		done:     make(chan struct{}),
 	}, nil
 }
 
@@ -81,9 +84,10 @@ func (t *TCPHost) StartSever() error {
 	}
 
 	fmt.Println("Server is ready. Share the ticket:", t.ticket)
+	<-t.done
+	fmt.Println("File transferred. Server shutting down.")
 
-	// prevent the app from closing
-	select {}
+	return nil
 }
 
 // Core logic to handle incoming connections
@@ -112,6 +116,8 @@ func (t *TCPHost) handleConnection(s network.Stream) {
 	if err != nil {
 		return
 	}
+
+	close(t.done)
 }
 
 // Perform handshake with the client
