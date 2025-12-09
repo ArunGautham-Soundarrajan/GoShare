@@ -29,11 +29,19 @@ expected either 'send' or 'receive'
 
 Examples:
 - Start a sender (listening on random TCP port):
+  ```
   ./goshare send ./example.txt
+  ```
   or
+  ```
   go run main.go send ./example.txt
+  ```
 
-- Connect as a receiver to the sender at localhost:9000:
+- Connect as a receiver to the sender:
+  ```
   ./goshare receive /ip4/127.0.0.1/tcp/50114/p2p/12D3KooWAJLW3
+  ```
   or
+  ```
   go run main.go receive /ip4/127.0.0.1/tcp/50114/p2p/12D3KooWAJLW3
+  ```
