@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -71,12 +72,12 @@ func (t *TCPHost) GenerateTicket() error {
 
 // Start the Server and listen for incoming connections
 // Upon receiving connections, handle the connections concurrently
-func (t *TCPHost) StartSever() error {
+func (t *TCPHost) StartSever(ctx context.Context) error {
 	// Generate the ticket
 
 	protocolID := "/goshare"
 
-	t.Host.SetStreamHandler(protocol.ID(protocolID), t.handleConnection)
+	t.Host.SetStreamHandler(protocol.ID(protocolID), func(s network.Stream) { t.handleConnection(ctx, s) })
 
 	err := t.GenerateTicket()
 	if err != nil {
@@ -94,30 +95,39 @@ func (t *TCPHost) StartSever() error {
 // Perform a handshake to verify the client
 // Append to the list of peers
 // Transfer the file
-func (t *TCPHost) handleConnection(s network.Stream) {
+func (t *TCPHost) handleConnection(ctx context.Context,
+	s network.Stream,
+) {
 	defer s.Close()
 
-	// Perform the handshake with the client
-	err := t.SeverHandshake(s)
-	if err != nil {
-		fmt.Printf("Handshake failed: %v\n", err)
+	select {
+	case <-ctx.Done():
+		fmt.Println("Connection canceled")
 		return
-	}
 
-	// Send the file info
-	err = t.SendFileInfo(s)
-	if err != nil {
-		fmt.Printf("sending fileinfo failed: %v\n", err)
-		return
-	}
+	default:
+		// Perform the handshake with the client
+		err := t.SeverHandshake(s)
+		if err != nil {
+			fmt.Printf("Handshake failed: %v\n", err)
+			return
+		}
 
-	// Stream the file
-	err = t.StreamFile(s)
-	if err != nil {
-		return
-	}
+		// Send the file info
+		err = t.SendFileInfo(s)
+		if err != nil {
+			fmt.Printf("sending fileinfo failed: %v\n", err)
+			return
+		}
 
-	close(t.done)
+		// Stream the file
+		err = t.StreamFile(s)
+		if err != nil {
+			return
+		}
+
+		close(t.done)
+	}
 }
 
 // Perform handshake with the client

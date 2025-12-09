@@ -41,7 +41,7 @@ func NewTCPClient(ticket string) *TCPClient {
 // Identifies the address to connect using the ticket
 // Performs handshake, gets the file details
 // Finally stores the file
-func (t *TCPClient) DialAndConnect() error {
+func (t *TCPClient) DialAndConnect(ctx context.Context) error {
 	// determine the address
 	var err error
 	t.address, err = peer.AddrInfoFromString(t.ticket)
@@ -49,12 +49,12 @@ func (t *TCPClient) DialAndConnect() error {
 		return fmt.Errorf("failed to parse senders address %w", err)
 	}
 
-	err = t.client.Connect(context.TODO(), *t.address)
+	err = t.client.Connect(ctx, *t.address)
 	if err != nil {
 		return fmt.Errorf("error Dialing to the server %w", err)
 	}
 
-	stream, err := t.client.NewStream(context.TODO(), t.address.ID, "/goshare")
+	stream, err := t.client.NewStream(ctx, t.address.ID, "/goshare")
 	if err != nil {
 		return fmt.Errorf("failed to create a steam %w", err)
 	}
